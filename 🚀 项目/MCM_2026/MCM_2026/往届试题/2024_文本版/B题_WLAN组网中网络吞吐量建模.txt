@@ -1,0 +1,132 @@
+2024年中国研究生数学建模竞赛B题（华为题目）
+WLAN组网中网络吞吐量建模
+一、背景
+无线局域网（Wireless Local Area Network，WLAN）是一种无线计算机网络，使用无线信道作为传输介质连接两个或多个设备。WLAN基于IEEE 802.11标准不断演进，驱动力是人们的业务诉求，从语音/邮件到网页和视频以及更加复杂的虚拟现实/增强现实，WLAN的部署场景也从家庭场景迅速覆盖到无线化办公、教育、医疗、工业制造、仓储等场景。下一代Wi-Fi 7标准支持峰值速率30Gbps，但在高密部署场景下，节点密集度增加，相邻小区覆盖范围重叠使得干扰、碰撞等问题突出，实际部署带宽和数据传输速率大幅下降，因此可支持系统吞吐量仍然有限，需要对WLAN系统进一步优化。
+WLAN优化问题的基础问题是吞吐量预测，吞吐量指节点单位时间内成功发送的比特数。精准和快速的吞吐量预测能够为设计鲁棒性和高性能WLAN系统提供很大的技术提升空间。最近一些研究利用机器学习的方法，通过特征提取，如信道、带宽、流量、发送功率、信道接入机制等基本信息、各个节点之间的接收信号强度（Received Signal Strength Indication, RSSI）、信干噪比（Signal to Interference and Noise Ratio, SINR）、传输时间等架构信息、以及节点动态位置、动态干扰等临时信息，进行训练和建模，从而预测系统的吞吐量。这些研究大多通过与仿真结果对比，来验证模型的预测精度。然而实际部署中，WLAN系统的通信行为受到信道环境、干扰的快速变化，业务流量复杂多样的影响，仿真结果并不精确，因此依靠仿真所训练的模型无法真正商用。
+本赛题期望能够基于WLAN实测数据，分析WLAN网络拓扑、节点间RSSI、信道接入机制、干扰等因素对WLAN数据发送、速率的影响，进一步地，对WLAN系统吞吐量进行精确预测。基于该吞吐量预测模型，对WLAN进行优化，有望突破工业、教育、医疗等新场景，为用户提供极致的业务体验。
+二、WLAN网络
+2.1 组网架构
+基本服务集（Basic Service Set, BSS）是WLAN的基本组成部分。在WLAN组网架构中（见图2.1），处于某一区域内的站点（Station, STA）与一个无线接入点（Access point, AP）组成一个BSS，该AP专职管理这些STA，称这些STA关联到这个AP，每个时刻STA只能关联到一个AP。常见的AP有无线路由器、WiFi热点等，常见STA有手机、笔记本、物联设备等。AP给STA发送数据称为下行；反之是上行，每个节点发送和接收数据不能同时发生。
+图2.1 WLAN组网架构
+2.2 接入机制
+WLAN中工作在同一信道的各节点共享信道，节点通过载波侦听多址接入/退避的机制避免冲突。接入过程可分为以下3个步骤：
+1. 信道可用评估（Clear Channel Assessment，CCA）：节点有数据要发送时，首先对工作信道进行固定时长的载波侦听，这个固定时长被称为分布式协调帧间距（Distributed Coordination Function Inter-frame Space, DIFS）。如果DIFS时段内接收到的信号强度RSSI低于CCA门限，判断信道为空闲，否则判断信道为繁忙。
+2. 随机回退：判断信道为空闲时，为避免节点间碰撞，每个节点根据其竞争窗口（Contention Window, CW），从[0, CW–1]的整数均匀分布选取一个随机整数作为回退数，将其乘以时隙slotTime（9μs），称为随机回退时段。如果信道在随机回退时段保持空闲，则节点开始一次数据传输。如果期间信道变繁忙，节点将暂停回退，直到信道重新在DIFS内空闲，再继续前面的回退。随机回退采用二进制指数退避算法确定，具体见附录。
+3. 数据传输：回退到0的节点发送一个数据帧，接收节点在成功接收到数据之后等待短帧帧间距（Short Inter-frame Space, SIFS）16μs，回复确认帧（Acknowledgement, ACK）32μs。
+2.3 CCA门限
+WLAN有两层协议栈，即物理（Physical, PHY）层和媒体接入控制（Medium Access Control, MAC）层。数据字段首先在MAC层封装MAC头，携带源MAC地址和目的MAC地址，接着在PHY层封装上PHY头，用于调制和解码，形成一个完整的Wi-Fi帧被发送出去。信道中传输的数据可以被一定区域内的任何其他节点接收，节点首先对PHY头解码，将解封装的数据帧上送到MAC层，节点通过MAC头携带的目的地址识别发送给自己的数据。AP通常配8根不同角度的天线接收信号，所有天线接收RSSI的和用于解码。
+WLAN引入包检测（Packet Detection, PD）门限和能量检测（Energy Detection, ED）门限这两个CCA门限，典型值分别是–82dBm和–62dBm。若节点PHY层接收机检测到完整的数据包的PHY头的前导（Preamble），则判定为Wi-Fi报文，采用PD门限；若未检测到Preamble，判定为非Wi-Fi报文，则采用ED门限判断信道忙闲。
+AP通常配8根不同角度的天线接收信号，各天线所接收RSSI的和就是所接收信号的RSSI。然而，在进行PD和ED门限判决时，仅采用各天线所接收RSSI中的最大值。
+2.4 NAV机制
+为保障低延时等高优先级业务，WLAN支持在MAC头携带网络分配矢量（Network Allocator Vector, NAV）字段，指示其它节点在该NAV时段内静默来为自己清空信道。NAV时段为该节点从发送数据帧到接收完ACK的时长。一个节点若处于其它节点指示的NAV静默期，则不竞争信道。在组网中，当AP PHY层接收到来自相邻BSS的数据帧时，若RSSI低于NAV门限（通常为–82dBm），则停止接收，直接丢弃；若RSSI高于NAV门限，则完成接收，并将其上送到MAC层，更新MAC头中携带的NAV时段。关于信道忙闲按CCA门限判断并结合静默期决定。AP采用各天线所接收RSSI的平均值用于NAV门限判决。
+2.5同步传输和异步传输
+当两个节点间的RSSI>ED时，一个节点传输数据时，另一节点检测信道为繁忙，称两个节点能“听”到。那么多数情况下二者的数据传输将交替进行，只在偶然同时回退到0时同时开始数据传输。节点同时发送数据时产生碰撞，可能导致传输失败。这种在节点间可侦听情况下发生的传输称为同步传输，包括交替进行和同时发生的传输。
+WLAN实际部署中，受覆盖范围和可用信道数约束，工作在相同信道的同频AP间RSSI大多处于[PD, ED]区间，一个区域内同频AP数量通常为3~5个。受业务类型影响，包长差异较大，如图2.2所示，在某次同步传输过程中，先结束传输的AP2进行CCA时，由于已经错过侦听AP1的Preamble，将采用ED作为CCA门限，从而判定信道为空闲，在回退到0时开始一次新的传输。称为异步传输。若AP1结束传输时，AP2的第二次传输已开始，则AP1同样原因可能会开始第二次传输，那么两个AP可能进入长时间的异步传输状态。
+图2.2 一次异步传输和异步传输状态示意图
+此外，NAV门限也对AP的传输方式有影响。如果AP间RSSI小于NAV门限，则相邻小区的数据被丢弃，NAV静默期不更新，两个AP总是不互“听”，每个AP独立收发数据。如果AP间RSSI大于NAV门限，当相邻小区发送数据时，若能检测到其Preamble，则NAV时段内需要静默，否则由于无法解码致使NAV不更新。因此，在异步传输发生概率高时，NAV失效。
+2.6 自适应调制编码算法
+发送数据的PHY层速率（PHY Rate）由调制编码方案（Modulation and Coding Scheme, MCS）和空间流数（Number of Spatial Stream, NSS）表征，一组（MCS, NSS）对应一个PHY Rate（见4.2节）。MCS和NSS越高，发送时携带的有效比特数越多，即PHY Rate越高。节点的PHY层对信号进行解调时，要求一定的SINR，其SINR越高，可支持成功解调的MCS和NSS越高。WLAN采用经典的自适应调制解调（Adaptive Modulation and Coding, AMC）算法，根据信道条件动态调整发送数据使用的（MCS, NSS）。具体地，初始化时采用默认值（如MCS6, NSS2）发送数据，并持续统计和更新丢包率（Packet Error Rate, PER）。当PER高于一定阈值时，代表当前SINR下，以该（MCS, NSS）发送数据的解调成功率低，需要降低MCS和NSS；否则提高MCS和NSS。AMC算法自适应寻找最优的PHY Rate发送数据，使得吞吐量最大。
+三、WLAN系统吞吐量建模
+赛题附件提供了WLAN组网场景下的实测数据，测试拓扑如图3.1所示，同频AP数量为2或3，AP向各自关联的STA发送下行数据。数据集提供了包括网络拓扑、业务流量、门限、节点间RSSI的测试基本信息，以及测试中收集的数据帧相关统计信息，即各节点发送时长、（MCS, NSS）、PER、吞吐量。测试基本信息即为模型输入，所收集统计信息为模型输出。
+图3.1 测试拓扑
+赛题目标是根据实测数据集中的测试基本信息，分析影响WLAN系统吞吐量的关键信息，并对系统吞吐量进行建模和预测。附件数据集中，训练集以“training_set_xx”命名，测试集“test_set_xx”命名。
+WLAN部署后，节点基于信道竞争接入机制进行CCA和随机回退，并发送数据。在节点间RSSI、信道竞争接入机制、CCA门限、NAV机制等共同影响下，节点以一定的概率发送数据。在测试中，每个AP竞争到信道发送下行数据的机会，可以用每个AP发送数据帧序列的总时长来表征，帧序列时长从开始发送一个数据帧到接收ACK结束。以两个AP传输一段时间为例，仅有同步传输时，每个AP交替抢到信道，偶然同时发送，发送时长基本上各占一半。两个AP总是不互听时，每个AP独立持续抢到信道，发送时长基本占满。当异步传输和同步传输混合时，每个AP的发送时长介于前述二者之间。
+问题1. 请根据附件WLAN网络实测训练集中所提供的网络拓扑、业务流量、门限、节点间RSSI的测试基本信息，分析其中各参数对AP发送机会的影响，并给出影响性强弱的顺序。通过训练的模型，预测每个AP的发送机会，即发送数据帧序列的总时长（seq_time），并通过测试集 test_set_1_2ap和test_set_1_3ap（仅提供模型输入信息）预测AP发送数据帧序列的总时长。可按照同频AP个数分类分析和分别建模，也可统一分析和建模。
+除了发送机会外，WLAN网络吞吐量还取决于发送时所选用的PHY Rate以及数据帧的比特数。AP给不同STA发送数据所选用的（MCS, NSS），即PHY Rate，受传输方式和干扰情况影响。以两个AP传输一段时间为例，有以下三种情形：
+a）仅有同步传输时，两个AP交替抢到信道，偶然同时发送。因此，STA接收数据时的干扰主要来自环境底噪，因而SINR高，AP选用的（MCS, NSS）较高，PHY Rate高。
+b）当两个AP总是不互听时，STA接收数据时可能受到较小的邻区干扰和环境底噪。分析时，假设环境底噪可忽略，则STA的SINR为关联AP到该STA的RSSI与邻区AP到该STA的RSSI之差。以图3.1中AP1与AP2为例，AP1发送数据给STA1-2，AP2发送数据给STA2-1，那么STA1-2在接收来自AP1的信号时，受到来自AP2的干扰，其SINR为AP1到STA1-2的RSSI与AP2到STA1-2的RSSI之差，STA2-1同理。AP发送数据选用的（MCS, NSS）与SINR相关。
+c）当两个AP的RSSI处于[PD, ED]或[NAV, PD]时，传输中出现由于错过Preamble而导致的异步传输，与同步传输混合。那么在同步传输阶段，STA接收数据时受到的干扰只有环境底噪，在异步传输阶段，干扰来自邻区AP和环境底噪。
+可见，AP的AMC所选用的（MCS, NSS）不仅与SINR相关，同时也与AP的传输方式相关。
+问题2. 请根据附件提供的实测训练集中的测试基本信息，特别是节点间RSSI信息和门限信息，结合问题1中对AP发送机会的分析，对测试中AP发送数据选用最多次数的（MCS, NSS）进行建模，并通过测试集 test_set_2_2ap和test_set_2_3ap（仅提供模型输入信息）预测（MCS, NSS）。（AP在AMC算法下自适应调节发送速率，过程中可能采用多个（MCS, NSS）,AMC算法收敛速度快，故其中选用最多次数的（MCS, NSS）反映了SINR水平）
+问题3. 请结合问题1和问题2的分析，对系统吞吐量进行建模，并通过测试集test_set_1_2ap和test_set_1_3ap预测网络吞吐量。可按照同频AP个数分类建模，也可统一建模。无线信道具有瞬息万变的特点，实测中所测量的RSSI信息属于大尺度信息，不足以完全反应真实信道变化，因而问题2对（MCS, NSS）的建模可能无法获得很高精度。本问题允许采用实测中统计的数据帧真实（MCS, NSS）作为模型输入变量。
+四、数据集介绍
+测试基本信息
+4.1.1网络拓扑信息：
+test_id: 测试编号
+test_dur (s): 一次测试的时间
+loc: AP和STA部署在某一指定位置的编号
+bss_id: 同一拓扑里的BSS编号
+ap_name: AP的名字
+ap_id: AP编号
+sta_mac: STA的MAC地址
+sta_id: STA编号
+4.1.2业务流量信息：
+protocol: 测试时，AP发送的流量类型，UDP或TCP，详细介绍见附录
+pkt_len (bytes): 数据长度。指的是聚合前的数据长度，聚合介绍见附录
+4.1.3门限信息：
+pd (dBm): 包检测门限
+ed (dBm): 能量检测门限
+nav (dBm): NAV门限
+4.1.4节点间RSSI信息：
+eirp (dBm): AP的发送功率
+ap_from_ap_x_sum_ant_rssi (dBm): AP各天线检测到来自ap_id为AP_x的RSSI的和。AP配8根不同角度的天线接收信号，取8根天线所测RSSI之和。测量方法是，在一次测试里，一个AP单独发送下行数据，另一个AP持续侦听，每隔0.5秒，读取并计算一次各天线RSSI之和。该值用于信号解码。（读取AP天线RSSI时刻，AP_x可能不在发送数据，则测量值是环境噪声。对此，需从测量值中过滤环境噪声，故数据集中的RSSI数据长度可能不一致。下同。）
+ap_from_ap_x_max_ant_rssi (dBm): AP各天线检测到来自ap_id为AP_x的RSSI的最大值。测量方法同上，不同之处是，每次记录各天线RSSI中的最大值。该值用于PD门限和ED门限判决。
+ap_from_ap_x_mean_ant_rssi (dBm): AP各天线检测到来自ap_id为AP_x的RSSI的平均值。测量方法同上，不同之处是，每次记录各天线RSSI的平均值。该值用于NAV门限判决。
+sta_to_ap_x_sum_ant_rssi (dBm): AP各天线检测到来自sta_id为STA_x的RSSI的和。测量方法同ap_from_ap_x_sum_ant_rssi。
+sta_to_ap_x_max_ant_rssi (dBm): AP各天线检测到来自sta_id为STA_x的RSSI的最大值。测量方法同ap_from_ap_x_max_ant_rssi。
+sta_to_ap_x_mean _ant_rssi (dBm): AP各天线检测到来自sta_id为STA_x的RSSI的平均值。测量方法同ap_from_ap_x_mean _ant_rssi。
+sta_from_ap_x_sum_ant_rssi (dBm): STA各天线收到的来自ap_id为AP_x的RSSI之和。STA配2根不同角度的天线接收信号，取2根天线所测RSSI之和。测量方法同ap_from_ap_x_sum_ant_rssi。
+sta_from_ap_x_max_ant_rssi (dBm): STA各天线收到的来自ap_id为AP_x的RSSI的最大值。测量方法同ap_from_ap_x_ max _ant_rssi。
+sta_from_ap_x_mean_ant_rssi (dBm): STA各天线收到的来自ap_id为AP_x的RSSI的平均值。测量方法同ap_from_ap_x_ mean _ant_rssi。
+sta_from_sta_x_rssi (dBm): STA各天线收到的来自sta_id为STA_x的RSSI的和。
+4.2 数据帧统计信息
+20MHz带宽时，选用不同（MCS, NSS）组合的PHY Rate（Mbps）如下表所示：
+在一次测试里，统计了每个AP发送数据帧时选用各（MCS，NSS）的数据帧个数，以及其中传输失败的数据帧个数。从中选择发送数据帧选用最多的那个（MCS，NSS）的统计信息，得到：
+nss: 空间流数。
+mcs: MCS阶数。
+per: 丢包率。选用该（MCS，NSS）发送数据帧的失败个数与总个数的百分比。
+num_ppdu: 一个数据帧的聚合个数。一次测试里，统计每个数据帧的聚合个数，取平均值。聚合的详细解释见附录。
+ppdu_dur (s): 一个数据帧的时长。一次测试里，统计每个数据帧的时长，取平均值。
+seq_time (s): 统计AP发送数据的帧序列的总时长。对于一次成功发送，帧序列时长为从开始发送数据帧，到成功接收到ACK的时长。对于一次发送失败，发送后收不到ACK，节点等待超时，那么帧序列时长从开始发送数据帧到超时的时长。所有测试里，AP发送数据采用RTS-CTS模式，帧序列时长从开始发送RTS到收到ACK，或者超时。RTS-CTS模式和帧序列示意图见附录。
+other_air_time (s): AP除发送数据帧外，发送管理帧等其他帧和接收所占用的时间
+throughput (Mbps): 实测每个AP的吞吐量，即每个AP单位时间内成功传输的比特数
+4.3 目标变量
+predict throughput (Mbps): 模型预测的每个AP的吞吐量
+error (%): 吞吐量预测误差，即模型预测的吞吐量与实测吞吐量之差与实测吞吐量的百分比(predict throughput – throughput ) / throughput * 100
+4.4 模型精度评估方法
+累积分布函数（Cumulative Distributed Function, CDF）描述了一个随机变量X小于或等于某一特定值x的概率，定义为。绘制测试集中吞吐量预测误差error的CDF曲线，取error小于或等于某一特定值ERROR的概率为90%时对应的特定值ERROR，则模型精度为1与ERROR的差值。请分别提供预测每AP吞吐的精度，和预测系统吞吐（所有AP吞吐之和）的精度。
+缩略语
+附录
+随机回退
+随机回退采用二进制指数退避算法确定回退时间。CW的初始值为CWmin，不同节点的CWmin可以相同，也可以不同，每次数据传输失败后进行重传时，CW翻倍。如果CW达到了CWmax，则保持此值，直到被重置为止。每次数据传输成功时CW重置，开始下一个数据帧的回退。若传输连续失败，重传次数达到r后，数据帧被丢弃，CW重置传输下一个数据帧。可见，重传r次时，无论成功还是失败，CW都会重置。
+附图1以三个节点为例说明。图中CW表示当前竞争窗口大小，BO表示随机回退过程时退避计数器从[0, CW–1]随机选取的初始值（整数）。三个节点的CWmin分别是8、16、32。开始时，Station c在发送数据，信道繁忙，数据发送完成后，退避计数器重置。Station a、b和c持续侦听信道DIFS时长，信道被检测为空闲，三者分别开始随机回退，都处于第0阶，竞争窗为[0, CWmin – 1]。Station a从[0,7]选择了一个随机数7，需要回退7个slotTime；Station b则从[0, 15]选择了随机数12回退；Station c从[0,31]选择了随机数16回退；显然，Station a最先回退到0，抢占到信道，开始一次数据发送，此时，Station b和c在其回退过程中由于侦听到信道繁忙，随机回退暂停。当Station a发送成功后，其竞争窗口重置，信道持续DIFS时长空闲后，Station a重新从[0,7]选择随机数5回退，Station b和c接着暂停前的回退数继续回退。本次Station a和b同时回退到0，同时发送数据，由于冲突导致发送失败，接收节点将不会回复ACK，Station a和b在等待ACKTimeout后判断数据发送失败，进行重传，将竞争窗翻倍，再次侦听信道DIFS时长判断信道空闲后，Station a从[0,15]选择随机数11回退，Station b则从[0,31]选择随机数9回退。
+需要注意的是，附图1中的一次传输（Tx，transmission）包含了发送一个数据包和接收一个ACK，一次collision包含了发送一个数据包和等待ACKTimeout时长。帧序列如附图2所示，一个数据帧包括PHY头、MAC头和有效载荷payload，ACK时长为32μs，ACKTimeout为53μs。为减少冲突，AP采用RTS-CTS模式发送数据，即发送节点先发送一个请求发送（Request to Send, RTS）帧，收到的节点回复一个允许发送（Clear to Send, CTS）帧，RTS和CTS的MAC头中携带NAV，通过该方式通知发送节点和接收节点的通信范围内的其他节点在此期间静默。RTS和CTS是短帧，时长32μs，RTS或CTS碰撞，相比数据帧碰撞，可避免信道浪费。RTS-CTS模式下的帧序列如附图2所示。
+附图1 二进制指数退避过程
+附图2 数据帧序列和RTS-CTS模式下发送成功发送失败的帧序列
+2 聚合
+为了提升发送小包的效率，协议允许通过聚合一次发送多个具有相同目的地址的数据包。来自网络上层（如以太网逻辑链路层LLC层），具有相同接收地址的同服务类别的MAC服务数据单元（MAC Service Data Unit, MSDU），可以在MAC层顶端被拼接起来，加上一个共同的MAC头，封装成一个MAC协议数据单元（MAC Protocol Service Data Unit, MPDU），这个过程叫作聚合MSDU（Aggregated MPDU , AMSDU）。组装好的MPDU在MAC层底端被聚合起来，每个MPDU前加一个短分隔符，随后聚合成为一个PHY协议数据单元（PHY Protocol Data Unit, PPDU）送给PHY层。每次发送数据时，缓存里有包则聚，遵循AMSDU个数最多为7，AMPDU个数最多为21，同时，一个PPDU时长不超过4.5ms。
+在进行聚合时，由于聚合的子MSDU之间，及子MPDU之间需要插入冗余字段，实际一个PPDU传输时长里，仅MSDU的总字节数是有效传输数据，进行吞吐量计算时才被计入，因此，AMSDU和AMPDU聚合的准确评估对吞吐量预测也有影响。如附图3（a）所示，应用层报文payload长度为1420 Bytes，包含40 Bytes长的IP协议头和1380 Bytes长的有效载荷。经过以太网有线网到达Wi-Fi的MAC层后，不聚合，加上8 Bytes的LLC层（以太网逻辑链路层）头，封装上30 Bytes的MAC头（802.11 header），形成一个MPDU。如附图3（b）所示，缓存里包增多时，进行聚合，MSDU之间插入0-3字节的填充字节进行4字节对齐，一个MPDU中的MSDU共用一个30 Bytes的MAC头。MPDU进行聚合时，前面加上分隔符delimiter，再进行4字节对齐，一个PPDU封装一个PHY头。
+附图3（a）以太网帧不聚合  （b）AMSDU聚合和AMPDU聚合
+3. 业务流量
+AP向各自的关联STA发送下行流量，一种是用户数据报协议（User Datagram Protocol, UDP）类型，是一种单向数据流，即从AP发往STA，数据报文的大小为1500 Bytes，报文的发送时间间隔服从泊松分布，发送数据的速率290 Mbps。另一种是传输控制协议（Transmission Control Protocol, TCP）类型，报文大小为1500 Bytes。TCP是一种面向连接的可靠协议，接收方通过回复TCP ACK确认收到的TCP Data，发送方据此调节每次发送报文的个数，当网络拥塞，丢包率高时，降低速率，当网络不拥塞，丢包率低时，提高速率，从而维持最优的网络吞吐量。AP发送下行TCP流量时，STA回复的上行TCP ACK对于Wi-Fi空口来说（需要注意区分TCP ACK与Wi-Fi里的ACK，也是数据帧，所以是双向数据流。TCP ACK的大小为64Bytes，下行TCP Data和上行TCP ACK的个数比例在3:1到2:1左右，所以下行TCP Data仍然占据主导。
+MCS | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11
+NSS1 | 8.6 | 17.2 | 25.8 | 34.4 | 51.6 | 68.8 | 77.4 | 86.0 | 103.2 | 114.7 | 129.0 | 143.4
+NSS2 | 17.2 | 34.4 | 51.6 | 68.8 | 103.2 | 137.6 | 154.9 | 172.1 | 206.5 | 229.4 | 258.1 | 286.8
+ |  | 
+AMC | Adaptive Modulation and Coding | 自适应调制编码
+AP | Access Point | 无线接入点
+ACK | Acknowledgement | 确认
+ACKTimeout | Acknowledgement Timeout | 确认超时
+BSS | Basic Service Set | 基本服务集
+CCA | Clear Channel Assessment | 信道可用评估
+CDF | Cumulative Distributed Function | 累积分布函数
+CTS | Clear to Send | 允许发送
+CW | Contention Window | 竞争窗口
+DCF | Distributed Coordination Function | 分布式协调功能
+DIFS | DCF Inter-Frame Space | DCF帧间距
+ED | Energy Detection | 能量检测
+MAC | Medium Access Control | 媒体控制
+MCS | Modulation and Coding Scheme | 调制编码方案
+NAV | Network Allocator Vector | 网络分配矢量
+NSS | Number of Spatial Stream | 空间流数
+PD | Packet Detection | 包检测
+PER | Packet Error Rate | 丢包率
+PHY | Physical | 物理层
+RSSI | Received Signal Strength Indication | 接收信号能量强度
+RTS | Request to Send | 请求发送
+SIFS | Short Inter-Frame Space | 短帧间距
+SINR | Signal To Interference And Noise Ratio | 信干噪比
+STA | Station | 站点
+TCP | Transmission Control Protocol | 传输控制协议
+UDP | User Datagram Protocol | 用户数据报协议
+WLAN | Wireless Local Area Network | 无线局域网

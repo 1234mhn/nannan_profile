@@ -1,0 +1,1507 @@
+IEEE TRANSACTIONS AND JOURNALS TEMPLATE
+1
+MedFILIP: Medical Fine-grained
+Language-Image Pre-training
+Xinjie Liang, Xiangyu Li, Member, IEEE, Fanding Li, Jie Jiang, Qing Dong, Wei Wang, Member, IEEE,
+Kuanquan Wang, Senior Member, IEEE, Suyu Dong, Member, IEEE, Gongning Luo, Member, IEEE, and
+Shuo Li,Senior Member, IEEE
+Abstract— Medical
+vision-language
+pretraining
+(VLP)
+that leverages naturally-paired medical image-report data
+is crucial for medical image analysis. However, existing
+methods struggle to accurately characterize associations
+between images and diseases, leading to inaccurate or
+incomplete diagnostic results. In this work, we propose
+MedFILIP, a fine-grained VLP model, introduces medical
+image-specific knowledge through contrastive learning,
+specifically: 1) An information extractor based on a large
+language model is proposed to decouple comprehensive
+disease details from reports, which excels in extracting
+disease deals through flexible prompt engineering, thereby
+effectively reducing text complexity while retaining rich
+information at a tiny cost. 2) A knowledge injector is
+proposed to construct relationships between categories
+and visual attributes, which help the model to make judg-
+ments based on image features, and fosters knowledge
+extrapolation to unfamiliar disease categories. 3) A se-
+mantic similarity matrix based on fine-grained annota-
+tions is proposed, providing smoother, information-richer
+labels, thus allowing fine-grained image-text alignment. 4)
+We validate MedFILIP on numerous datasets, e.g., RSNA-
+Pneumonia, NIH ChestX-ray14, VinBigData, and COVID-
+19. For single-label, multi-label, and fine-grained classifi-
+cation, our model achieves state-of-the-art performance,
+the classification accuracy has increased by a maximum
+of 6.69%. The code is available in https://github.com/
+PerceptionComputingLab/MedFILIP.
+Index Terms— contrastive learning, vision-language pre-
+training, CXR imaging, fine-grained, interpretability.
+Manuscript received ***; revised ***; accepted ***. Date of publication
+*** ***, ***; date of current version *** **, ****. This work was supported
+by the Key Research & Development Program of Heilongjiang Province
+under Grant 2023X01A08, the National Natural Science Foundation
+of China under Grants 62272135, 62372135; the Postdoctoral Fel-
+lowship Program of CPSF under Grant Number GZC20242214; the
+China Postdoctoral Science Foundation under Grants 2024M754207.
+(Corresponding author: Xiangyu Li; Gongning Luo.)
+Xinjie Liang, Xiangyu Li (e-mail: lixiangyu@hit.edu.cn), Fanding Li, Jie
+Jiang, and Kuanquan Wang are with the School of Computer Science
+and Technology, Harbin Institute of Technology, Harbin, China. Qing
+Dong is with the Department of Thoracic Surgery at No. 4 Affiliated
+Hospital, Harbin Medical University, Harbin, China. Wei Wang is with
+the School of Computer Science and Technology, Harbin Institute of
+Technology, Shenzhen, China. Suyu Dong is with the College of com-
+puter and control engineering, Northeast Forestry University, Harbin,
+China. Gongning Luo (gongning.luo@kaust.edu.sa) is with the Com-
+puter, Electrical and Mathematical Sciences & Engineering Division,
+King Abdullah University of Science and Technology, Thuwal, Saudi
+Arabia. Shuo Li (e-mail: shuo.li11@case.edu) is with the Department of
+Biomedical Engineering and Department of Computer and Data Science
+Case Western Reserve University, Cleveland, OH, USA.
+Fig. 1.
+Existing medical VLP methods are limited in adequately
+characterizing the relationships between images and diseases. Using
+reports as supervision risks (1a) confusing disease descriptions from a
+single report and (1b) separating same-disease samples from different
+cases into distinct classes, leading to inaccurate classification. Using
+disease entities as supervision (2a) disregards subclasses, inhibiting
+customized care fitting a patient’s circumstances, and (2b) can not
+classify classes unseen in the training dataset, lacking generalization.
+I. INTRODUCTION
+M
+EDICAL vision-language pretraining (VLP) that lever-
+ages naturally-paired image-report data has proven to
+be a pivotal component for the medical image analysis tasks
+(MIA) [1]–[3]. Data scarcity, an ongoing challenge in MIA
+can be significantly mitigated by utilizing medical reports as
+supervision [4]–[6], because reports occur alongside images
+naturally in clinical records, without requiring human labeling.
+Additionally, reports are derived from real patient cases and
+inherently relate to the corresponding images, better reflecting
+real-world clinical scenarios and practice [7], [8]. Medical
+VLP methods that exploit this organically paired data excel
+in capturing the interplay between images and reports. This
+synergy is crucial for the effective modeling of image-disease
+relationships and essential for a variety of downstream medical
+applications.
+However, existing medical VLP methods have limitations
+in adequately characterizing the relationships between images
+and diseases, primarily due to the challenge of harnessing the
+arXiv:2501.10775v1  [cs.CV]  18 Jan 2025
+
+2
+IEEE TRANSACTIONS AND JOURNALS TEMPLATE
+Fig. 2.
+MedFILIP overcomes the limitations of previous methods by effectively modeling the complex relationship between images and reports.
+To address concurrent diseases and repeated occurrences, MedFILIP designs a GPT-IE to compress reports into fine-grained entities. To address
+overlooking subclasses, MedFILIP retains details like location and severity in the fine-grained entities. To improve the generalization of unseen
+categories, MedFILIP introduces an IKI to leverage image-specific knowledge from seen classes to guide inferences for unseen classes.
+rich yet complex information contained within the diagnostic
+reports, as shown in Fig. 1. There are two general medical
+VLP methods based on contrastive learning: (1) Image-report
+paired methods, simply pair medical images with diagnostic
+reports for contrastive learning [4], [9]. However, using the
+entire report to match a medical image can lead to confusion
+when reports describe multiple diseases, as shown in Fig. 2.
+Furthermore, treating images from different cases as distinct
+classes may result in incorrectly treating two samples with
+the same disease, but from different cases, as separate classes,
+as shown in Fig. 2. (2) Image-entity paired methods, first
+extract disease category information from reports and then
+combine category information with prompt templates as the
+textual supervision for contrastive learning
+[6]. Although
+such methods effectively reduce the complexity of text, they
+result in the loss of rich contextual information in the reports.
+Since a disease class could be split into diversified subclasses
+subject to severity and location, overlooking these details can
+lead to an inability to provide customized care plans suited
+to a patient’s specific circumstances [10], [11]. Moreover,
+classes not encountered during the training phase may appear
+during the prediction phase. Relying solely on categories
+without extra information will lead to a lack of generalization
+capability for these unseen categories.
+To better capture the cross-modal correlations between
+images and texts, we propose MedFILIP, a medical vision-
+language pre-training method leveraging two types of fine-
+grained annotations. The MedFILIP designs an information ex-
+tractor based on a large language model (GPT-IE) to compress
+full diagnostic radiology reports into fine-grained entities.
+GPT-IE deals with concurrent diseases and repeated occur-
+rences by decoupling disease information from lengthy reports
+and improves the model’s understanding of complex intra-class
+variations by retaining critical information such as disease
+location and severity in the fine-grained entities. The proposed
+MedFILIP introduces an image-specific knowledge Injector
+(IKI) that transforms each disease category into fine-grained
+explanations composed of visual attributes to enhance vision-
+language alignment. By employing attribute-level annotations,
+IKI captures the fine-grained relationships between diseases
+and visual attributes. This explains how models make judg-
+ments based on image features and enables the model to
+leverage the learned conceptual relationships from seen classes
+to guide inferences for unseen classes. In order to fully utilize
+the fine-grained entities and explanations, we calculate a
+semantic similarity matrix (SSM) from them. SSM captures
+correspondences between images and texts more precisely,
+providing a more fine-grained supervisory signal that aids
+the model in learning to extract visual features and establish
+relationships between visual and textual features.
+The key contributions of our method are as follows:
+We present GPT-IE, a pioneering approach that lever-
+ages a large language model to extract triplet informa-
+tion—comprising disease severity, disease location, and dis-
+ease category—from diagnostic reports. This decoupling pro-
+cess reduces textual complexity while preserving the rich
+information essential for medical vision-language pre-training.
+Unlike previous approaches that do not fully utilize the
+wealth of medical knowledge available, IKI integrates this
+prior knowledge by establishing a mapping between disease
+categories and their visual-attribute descriptions. This strategy
+facilitates the transfer of knowledge from known to novel
+categories, thereby enabling zero-shot prediction for disease
+categories that have not been previously encountered.
+To capture the similarity relationships between images and
+texts, we present SSM as an innovative alternative to the
+traditional identity matrix or multi-hot matrix labels employed
+in contrastive learning. SSM is based on texts composed
+of extracted entities and image-specific explanations. The
+similarity between the texts is used as a proxy for the similarity
+between images and texts, ensuring that the vision-language
+alignments are rooted in precise, relevant labels.
+We introduce a new dataset comprising 141,171 images
+based on the MIMIC-CXR dataset [8]. We enhance the texts
+with fine-grained entities and explanations, which reduce
+redundant information while retaining necessary disease de-
+tails and introducing medical prior knowledge. This newly
+established large-scale medical multimodal dataset supports
+the training of MedFILIP and serves as a valuable resource
+for the broader research community, addressing the scarcity
+of fine-grained, annotated medical datasets.
+II. RELATED WORK
+
+LIANG et al.: MEDFILIP: MEDICAL FINE-GRAINED LANGUAGE-IMAGE PRE-TRAINING
+3
+A. Medical Vision-Language Contrastive Learning.
+To address the scarcity of annotated medical image-related
+data, numerous studies have employed text as supervisory
+information [1], [12], [13]. The text contains rich and precise
+signals, and using data where images accompanied by text can
+reduce the need for additional manual labeling [14]–[16]. For
+example, CLIP [9] collects data from the web to obtain a large
+number of image-text pairs. ConVIRT [4] pairs diagnostic
+reports obtained during clinical diagnostic processes with
+corresponding images. MedCLIP [6] augments unpaired data
+by converting it into paired image-text data as a supplement.
+However, previous methods lack the ability to represent fine-
+grained visual features of the disease. Our approach improves
+the model’s fine-grained representation ability by establishing
+a mapping between disease categories and their visual-attribute
+descriptions, thereby associating disease categories with their
+relevant attributes within the model.
+The medical image-text contrastive learning method em-
+ploys a two-stream flow contrastive learning strategy to map
+images and text into a unified representation space, achieving
+semantic alignment between visual and textual modalities.
+Image-report paired methods pair medical images with radiol-
+ogy reports for contrastive learning [4], [17]; however, they
+encounter limitations in scenarios involving current diseases
+and repeated occurrences. Image-entity paired methods apply
+named entity recognition (NER) [7] tools to extract disease
+categories from diagnostic texts, then combine category infor-
+mation with additional information as the textual supervision
+for contrastive learning [5], [6]; however, they struggle to
+handle intra-class differences and generalize to novel classes.
+Our approach decouples disease information from diagnostic
+reports, thus addressing the common problem of concurrent
+diseases and repeated occurrences. And through the preser-
+vation of detailed information, our method offers an accurate
+understanding of various disease subclasses.
+B. Fine-grained Representation Learning.
+Fine-grained representation learning refers to the process
+of learning detailed and discriminative representations for
+objects within a specific category by capturing the fine-grained
+relationship between image regions and textual attributes [18]–
+[21]. Previous methods such as PLIP [22] focused on the
+attribute-level distinctions between different categories, over-
+looking the connections that exist between categories. Using
+additional medical knowledge can help the model implicitly
+establish relationships between medical entities [23], [24].
+In our method, disease categories are not only transformed
+into combinations of image-specific attributes but are also en-
+riched with additional medical knowledge, such as anatomical,
+pathological, and imaging correlates, which are missing in the
+traditional fine-grained representation learning approach. This
+allows the model to leverage both more fine-grained visual fea-
+tures and prior knowledge from the medical domain, providing
+a more comprehensive characterization of the relationships
+between images and diseases.
+III. METHODOLOGY
+A. GPT-IE for Fine-grained Label Extraction
+GPT-IE leverages the extensive knowledge encapsulated
+within large language model (LLM) to extract fine-grained
+entities from diagnostic reports. This extraction process de-
+couples disease information from lengthy reports, converting
+the one-to-one image-report relationship into a one-to-many
+relationship between image and diseases, which is instrumental
+in differentiating concurrent diseases and various instances of
+the same disease. Additionally, GPT-IE captures detailed dis-
+ease characteristics, such as location and severity, enabling the
+creation of a fine-grained medical dataset, which is pivotal for
+training deep learning models to handle intra-class variations,
+ultimately enhancing patient-specific care.
+Distinct from traditional Named Entity Recognition (NER)
+systems [7], which rely on predefined rules and lack flexibility,
+GPT-IE uses the LLM to extract entities without more human
+design. The innovative use of prompt engineering enables
+LLM to perform specialized entity extraction without exten-
+sive setup [25], [26]. Designing suitable prompts can guide
+LLM to look for specific patterns, we employ prompts such
+as “Each extracted piece of disease-related information should
+follow the format: severity of disease + location of disease
++ category of disease.” Thus, GPT-IE can extract expected
+fine-grained entities, directly addressing the specific needs of
+medical data labeling. The extraction process is defined by:
+{severity, location, category} = fIE(report + prompt),
+(1)
+where fIE is the information extractor, and the fine-grained
+entities consist of severity (e.g., acute, chronic, mild), location
+(e.g., left-sided, bilateral, mediastinal), and category (e.g.,
+pneumonia, pneumothorax, pulmonary nodules). Note that not
+all triples contain complete information; those missing severity
+or location will be preserved, while triples lacking the category
+will be removed. For a balanced consideration of both cost and
+performance, our primary experiments were conducted using
+GPT-3.5-Turbo [27]. The granular details of the extraction
+method, along with the LLM’s prompt design strategies, are
+comprehensively elaborated in the supplementary material.
+Summarized
+advantages.
+GPT-IE
+introduces
+a
+cost-
+efficient framework capable of diverse information extraction
+needs. By dynamically adjusting prompts based on actual
+needs, GPT-IE converts diagnostic reports expected into fine-
+grained disease information, which can reduce the complexity
+of supervisory text while retaining the disease details.
+B. IKI for Improving Generalization
+The proposed Image-specific Knowledge Injector (IKI) en-
+ables unseen category classification by correlating disease
+categories with visual features and prior knowledge. Dis-
+tinguishing between “localized patchy shadowing or consol-
+idative opacities” and “darkened area between the lung and
+chest wall” is more straightforward than discerning between
+“pneumonia” and “pneumothorax” [28]–[30]. Building on this,
+IKI deconstructs abstract disease categories into these dis-
+tinct, image-specific attributes. This decomposition enables the
+model to understand the relationships between visual features
+
+4
+IEEE TRANSACTIONS AND JOURNALS TEMPLATE
+Fig. 3.
+The proposed MedFILIP balances text complexity and information richness by distilling diagnostic reports into refined labeling formats and
+enhancing labels with medical image-specific knowledge. Specifically: 1) Diagnostic reports are processed by GPT-IE to obtain fine-grained entities.
+2) IKI is used to augment disease entities with medical image-specific knowledge. 3) SSM is calculated based on the combination of fine-grained
+entities and explanations to establish clearer similarity-relationships between medical images and disease descriptions. 4) Multimodal contrastive
+learning is conducted under the supervision of SSM. Additionally, we randomly mask the texts to address the problem of partially missing labels.
+and the defining characteristics of clinical categories during
+the multimodal pretraining phase. Consequently, the model is
+armed with a conceptual framework that allows it to recognize
+features of known diseases and apply this understanding
+to identify unseen conditions, since visual attributes such
+as shape and color are common across disease categories.
+Additionally, image-specific explanations will be expanded by
+medical knowledge to form a complete disease description.
+For example, the description of pneumonia is “An infection
+causing consolidation, often seen as patchy or confluent white
+areas within the lung fields”, where visual attributes and
+medical prior knowledge are both included. This allows the
+model to leverage both more fine-grained visual features and
+prior knowledge from the medical domain, providing more
+comprehensive relationships between images and diseases.
+Different from the traditional image classification methods
+where an image I is associated with a single label from a
+predefined set of classes, our approach considers a set of
+attributes A = {a1, a2, ..., an}. Each attribute ai represents
+a specific, identifiable feature in the image. For a given I, a
+binary attribute vector aI = [aI
+1, aI
+2, ..., aI
+n] can be defined,
+where aI
+i is 1 if the attribute ai is present in the image and 0
+otherwise. The classification basis is deconstructed as follows:
+aI = D(I),
+(2)
+where D is a deep neural network that deduces the attribute
+representation from the image. With the extracted attribute
+vector aI, the model predicts the disease by analyzing the
+correspondences between attributes and clinical classes.
+The above method is operationalized through image-text
+contrastive learning. Rather than explicitly calculating aI, the
+model infers it by evaluating the similarity between image
+features and textual descriptions. For instance, if there is a high
+similarity between an image and the text ”localized areas of
+shadowing”, it implies that the image possesses the attributes
+described in the text. The model can then deduce the most
+likely disease category based on these attributes.
+We map the category information from the fine-grained
+entity obtained by GPT-IE to an explanation based on a
+medical image-specific knowledge dictionary:
+Te = Dict(Tf[categories]),
+(3)
+where Te is the explanation of disease, Dict is a repository
+mapping text descriptions to each category, Tf is the fine-
+grained entities. By using the category information in the fine-
+grained entities, relevant explanations of the disease can be
+obtained from the Dict. More details of the Dict can be found
+in the supplementary material.
+Summarized advantages. By transferring abstract dis-
+ease categories into descriptive explanations encapsulating
+attributes like shape, structure, color, and texture, IKI helps
+the model to establish explicit connections between diseases
+and visual features, thereby allowing the model to recognize
+unseen diseases like COVID-19 based on the relationships
+learned between explanatory texts and manifested image pat-
+terns, without requiring direct training examples. This process
+is more interpretable because it grounds the categorization in
+observable attributes rather than abstract categories.
+C. SSM for Finer-grained Image-text Alignment
+The proposed semantic similarity matrix (SSM) offers a
+more precise label representation that better captures the
+relationships between medical images and their textual an-
+notations. SSM is used to replace the multi-hot matrix for
+enhanced visual-language alignment, by using a continuum of
+values ranging from 0 to 1 instead of binary states (0 or 1),
+the SSM can not only realize clustering of different diseases
+but also realize internal clustering of different subclasses, as
+shown in Fig. 4. Meanwhile, unlike previous methods where
+each image contains only one positive label for a specific
+condition [6], [17], the SSM can handle situations where each
+image corresponds to one or more disease labels, thus enabling
+the model to perform multi-label classification. We calculate
+
+LIANG et al.: MEDFILIP: MEDICAL FINE-GRAINED LANGUAGE-IMAGE PRE-TRAINING
+5
+the SSM based on structured labels that are formed by fine-
+grained entities and explanations. The calculation process
+hinges on the premise that structured labels encapsulate the
+essential semantic essence of medical images; hence, these
+label interrelationships can act as a proxy for the correspon-
+dences between images and structured labels. Specifically, the
+calculation process is as follows:
+Input data contains N images and reports in every batch; a
+diagnostic report may contain multiple disease descriptions,
+so N images correspond to M structured labels lj, j =
+1, 2, ..., M. The number of structured labels corresponding to
+each image is ci, i = 1, 2, ..., N, PN
+i=1 ci = M, the i-th image
+corresponds to ci structured labels {lj| P
+k<i
+ck < j ≤P
+k≤i
+ck}.
+The semantic similarity between the M structured labels is
+calculated to obtain a matrix of size M × M. Then the
+maximum values of each column in a sub-matrix of size
+ci×M are compressed to obtain a vector of size 1×M, which
+represents the similarity between the i-th medical image and
+the M structured labels. During compression, lt∗selects, from
+a set of ci structured labels, the one label that has the highest
+similarity to the j-th structured label.
+t∗=
+Argmax
+P
+k<i
+ck<t≤P
+k≤i
+ck
+(cos(Esim(lt), Esim(lj))),
+(4)
+where Esim is the similarity model that is pre-trained by
+medical knowledge and used to obtain the feature of the
+text. Applying max pooling to compress the sub-matrix is
+well-suited for multi-label image classification by preserving
+the strongest associations between each image and potential
+labels. We do not use average pooling because we want to
+avoid including weak matching in the calculation and prevent
+lowering the weights of strong matching.
+The label matrix is s, where sij represents the similarity
+between the i-th image and the j-th structured label, and the
+size of s is N × M. The calculation formula for s is:
+sij = cos(Esim(lt∗), Esim(lj)),
+(5)
+where sij is the maximum cosine similarity between ci struc-
+tured labels and the j-th structured label as the similarity
+between the i-th image and the j-th structured label. The
+matrix s will be used as the label matrix for vision-language
+contrastive learning, as shown in Fig. 3.
+Summarized advantages. The Semantic Similarity Matrix
+(SSM) enhances medical image analysis by supporting multi-
+label classification and providing a more granular similarity
+measure between images and disease labels. Its use leads to
+improved model performance through better visual-language
+alignment and detailed semantic representation.
+D. Multimodal Contrastive Learning
+a) Training: The image and text are processed through
+their respective feature extractors:
+i = fimg(Eimg(ximg)),
+(6)
+l = ftxt(Etxt(xtxt)),
+(7)
+Fig. 4.
+Our method maps image and text features into an embedding
+space, where it strategically clusters similar features while distancing
+dissimilar ones, and it also finely groups closely related subclasses
+based on semantic similarity.
+where ximg and xtxt represent the image and text inputs, Eimg
+and Etxt are the encoders that extract image-specific features
+and distill medical knowledge from text, respectively. fimg
+and ftxt are projections used to map image and text features
+into the same embedded space, producing the final features
+i and l. Then a cosine similarity is computed to predict the
+similarity between images and texts:
+Yi,j =
+I⊤
+i · Lj
+||I⊤
+i || · ||Lj||,
+(8)
+where I is the set of image feature vectors, L is the set of text
+feature vectors, and Y is the cosine similarity between images
+and texts, which is obtained by computing the inner product
+of I and L.
+The model adjusts the proximity of embeddings in this
+shared space based on label similarity; the higher the similar-
+ity, the closer the embeddings, as shown in Fig. 4. Embeddings
+from similar image and text are positioned closer together in
+the embedded space, embeddings from different image and
+text are positioned farther. Due to the high similarity between
+subclasses, yet not being identical, clustering of subclasses
+will be carried out within the same class.
+b) Image-Text Matching Loss (ITM): ITM loss refines the
+model’s learning process by treating similarity as a contin-
+uous variable. It combines the mean squared error (MSE)
+with cross-entropy (CE) loss to better capture the degree of
+association between images and texts:
+L(y, s) =
+1
+nm
+n
+X
+i=1
+m
+X
+j=1
+(yi,j −si,j)2
+|
+{z
+}
+MSELoss
+−1
+n
+n
+X
+i=1
+m
+X
+j=1
+yi,jlog(si,j)
+|
+{z
+}
+CELoss
+,
+(9)
+where y is predicted matrix, s is the sementic similarity matrix,
+n represents the number of images, m represents the number
+of fine-grained entities.
+c) Inference: By calculating the similarity between image
+embedding and text embedding, the model is able to determine
+whether an image I belongs to a certain category C,
+P(I ∈C) = Sim(Eimg(I), Etxt(template(C, Dict(C)))),
+(10)
+C∗= Argmax
+C∈V
+(P(I ∈C)),
+(11)
+
+6
+IEEE TRANSACTIONS AND JOURNALS TEMPLATE
+TABLE I
+ZERO-SHOT CLASSIFICATION RESULTS
+Dataset
+MIMIC-16
+Pneumonia
+MIMIC-multi
+ChestX-ray14
+VinBigData
+MIMIC-FG
+Metric
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+CLIP
+12.26
+20.30
+51.23
+31.55
+11.83
+18.90
+18.32
+15.44
+13.79
+16.13
+26.01
+19.82
+ConVIRT
+63.90
+26.28
+76.11
+58.42
+54.63
+26.76
+71.02
+16.28
+53.05
+23.01
+54.91
+31.07
+GloRIA
+62.54
+21.47
+71.29
+49.01
+57.40
+24.60
+77.00
+17.32
+55.20
+21.87
+53.92
+28.95
+MedCLIP
+64.48
+25.05
+76.82
+59.63
+59.23
+31.65
+72.48
+19.94
+58.04
+27.46
+59.77
+32.55
+MedKLIP
+69.67
+32.38
+80.02
+63.42
+64.37
+36.87
+86.19
+25.25
+67.87
+30.78
+65.44
+36.83
+Ours
+74.71
+37.53
+81.23
+66.08
+71.06
+40.20
+85.67
+28.78
+70.03
+38.69
+71.85
+41.27
+where Dict can map C to its explanation, and C will be
+enhanced by a template:“{severity}+{location}+{category},
+where {category} is {explanation}”. Eimg and Etxt repre-
+sent the encodings of the text and image, Sim calculates
+the similarity between the text and image embeddings, and
+the similarity score represents the probability of the image
+belonging to the category C. V is the category library, by
+comparing the image with all categories in the category library,
+the most similar C∗to the image can be obtained.
+Summarized advantages. We use a dual-encoder frame-
+work to extract features from medical images and texts, then
+a precise alignment between images and textual descriptors is
+established, and images can be classified by comparing the
+computed similarity scores against a comprehensive library of
+textual explanations.
+IV. EXPERIMENTS
+A. Experimental Setup
+a) Datasets: RSNA-Pneumonia [31], contains around
+30k chest X-ray images including normal and pneumonia
+cases. We use 1,024 samples to test the model’s capability
+for single-label classification.
+NIH ChestX-ray14 [32], contains around 112k chest X-ray
+images of 18 chest diseases. We use 1,024 samples containing
+10 common diseases to test the model’s capability for multi-
+label classification.
+VinBigData [33], contains around 18k chest X-ray images
+of 14 chest diseases. We use 1,024 samples containing 8
+common diseases to test the model’s capability for multi-label
+classification.
+COVID [34], contains around 18k chest X-ray images in-
+cluding non-COVID and COVID cases. We use 1,024 samples
+to test the model’s performance on unseen types.
+MIMIC-CXR [8], [35], contains around 370k chest X-ray
+images paired with associated radiology reports. We obtain
+four datasets from the MIMIC-CXR:
+MIMIC-train, contains 50 diseases with a positive ratio of
+over 0.0001, labeled as severity + lesion location + category,
+with 50,000 samples for model pre-training;
+MIMIC-16, contains 16 diseases with a positive ratio
+of over 0.01 to test the model’s capability for single-label
+classification;
+MIMIC-multi, contains 16 diseases with a positive ratio
+of over 0.01 to test the model’s capability for multi-label
+classification;
+MIMIC-FG, contains the 5 most common diseases and
+3 disease severity, with each sample potentially containing
+multiple diseases and severity + category as labels, to test
+the model’s fine-grained classification performance.
+b) Baselines: ResNet [36] is a deep convolutional neu-
+ral network architecture that utilizes residual connections to
+enable the training of very deep networks by mitigating the
+vanishing gradient problem.
+ConvNeXt [37] is a modernized convolutional neural net-
+work architecture that incorporates design principles from
+transformer models to enhance performance and efficiency in
+computer vision tasks.
+CLIP [9] performs image-text contrastive learning through
+natural language supervision signals.
+ConVIRT [4] performs contrastive learning on medical
+image-report paired data.
+GloRIA [17] contrasts global image representations with
+reports and local image patches with report words.
+MedCLIP [6] decouples image-text pairs using NER for
+multi-modal contrastive learning, addressing issues of false
+negatives and lack of training data.
+MedKLIP [5] extracts disease information from diagnostic
+reports and augments it with medical domain knowledge to
+improve visual language processing in radiology.
+c) Implementation Details: We employed bioClinicalBERT
+[38] for semantic similarity, ResNet50 [36] as the image
+encoder, and Transformer [39] as the text encoder; both
+encoders are initialized with CLIP pre-trained weights. The
+learning process utilized a dual loss function strategy: cross-
+entropy loss for contrastive learning and mean squared error
+loss for precise matching in fine-grained classification tasks.
+Stochastic gradient descent (SGD) was chosen as the opti-
+mizer, starting with a learning rate of 0.006 and using Cosine
+Annealing Warm Restarts for learning rate adjustment. During
+data preprocessing, the images were cropped to a single-
+channel size of 448x448 pixels. Standardization was applied
+post-cropping without further augmentations. The pretraining
+phase was executed on a single RTX-3090 GPU, spanning 100
+epochs and taking roughly 10 hours to complete.
+B. Downstream Tasks
+1) Zero-shot Classification:
+a) Experimental settings: The classification results are
+based on the candidate texts with a cosine similarity exceeding
+the threshold to the input image. For our approach, the can-
+didate texts consist of image-specific explanations related to
+
+LIANG et al.: MEDFILIP: MEDICAL FINE-GRAINED LANGUAGE-IMAGE PRE-TRAINING
+7
+TABLE II
+FINE-TUNING CLASSIFICATION RESULTS WITH DIFFERENT PORTIONS OF TRAINING DATA
+Dataset
+Pneumonia
+VinBigData
+Portion
+1%
+10%
+100%
+1%
+10%
+100%
+Metric
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+Resnet50 (Random Init)
+63.48
+51.43
+74.54
+58.65
+79.39
+64.71
+60.35
+29.39
+65.81
+33.92
+67.20
+36.71
+ConvNeXt (Random Init)
+69.53
+49.65
+75.00
+62.57
+78.13
+63.42
+59.48
+28.15
+66.87
+33.83
+71.61
+36.42
+Resnet50 (ImageNet Init)
+78.52
+62.17
+77.05
+66.37
+80.47
+68.04
+60.28
+34.89
+68.34
+37.05
+68.70
+39.10
+ConvNeXt (ImageNet Init)
+77.34
+64.06
+79.12
+64.07
+78.32
+68.82
+62.39
+33.72
+67.23
+36.40
+70.29
+37.93
+MedCLIP (MIMIC-CXR Pre-trained)
+80.11
+64.62
+80.27
+66.41
+82.31
+70.36
+67.39
+34.14
+70.38
+38.79
+73.80
+40.96
+MedKLIP (MIMIC-CXR Pre-trained)
+80.84
+67.55
+81.29
+69.32
+81.95
+71.20
+69.01
+36.25
+71.20
+39.65
+74.54
+41.87
+Ours
+81.59
+68.73
+83.14
+71.69
+84.96
+72.28
+73.95
+39.71
+75.45
+41.81
+75.52
+44.01
+the diseases. In contrast, the candidate texts used by previous
+methods are categories combined with a prompt template,
+following the format “This is an X-ray image of {category}.”
+For example, the MIMIC-16 dataset includes 16 types of
+diseases, and the candidate texts corresponding to these 16
+diseases are used to calculate the cosine similarity with the
+image. The disease categories with cosine similarity exceeding
+a certain threshold are selected as the classification results
+for the image. We use accuracy and F1 score to validate the
+effectiveness of the method. Accuracy measures the fraction
+of correctly predicted instances out of the total instances and
+F1 score is the harmonic mean of precision (the accuracy of
+positive predictions) and recall (the ability to find all positive
+instances). In medical datasets, the positive and negative class
+samples are highly imbalanced; thus, in this paper, we use
+the threshold that maximizes the F1 score, so the accuracy
+metric is the accuracy when the F1 score is the highest. For
+datasets that contain multiple diseases, we separately calculate
+F1 Score and accuracy for each disease and then calculate the
+average.
+b) Experimental results: MedFILIP demonstrates highly
+competitive results in zero-shot scenarios across six datasets,
+outperforming current state-of-the-art (SOTA) image-text pre-
+training models, Table I shows these findings. Our proposed
+method demonstrates exceptional robustness and broad ap-
+plicability, as evidenced by its impressive zero-shot perfor-
+mance across multiple datasets while consistently delivering
+high-quality results. On MIMIC-16 and RSNA-Pneumonia,
+we compared single-label classification performance with im-
+provements of 5.04% and 1.21%, respectively. On MIMIC-
+multi, ChestX-ray14, and VinBigData datasets, we compared
+multi-label classification performance, with improvements by
+a maximum of 6.69%. MedFILIP’s performance metrics on
+fine-grained classification, which involves distinguishing be-
+tween subclasses, are superior to other models that only
+consider broader disease categories. On the MIMIC-FG dataset
+that is specifically designed for evaluating fine-grained image
+classification, we compared fine-grained classification perfor-
+mance with improvements of 6.41%, as shown in the MIMIC-
+FG column in Table I.
+2) Fine-tuned Classification:
+a) Experimental settings: MedFILIP, along with multi-
+modal pre-training methods, was evaluated through linear
+TABLE III
+RESULTS OF PREDICTIONS ON UNSEEN CATEGORY
+Method
+Category
+Explanation
+Metric
+ACC↑
+F1↑
+ACC↑
+F1↑
+MedCLIP
+60.46
+47.31
+61.03
+57.44
+MedKLIP
+63.38
+63.26
+68.57
+71.43
+Ours
+62.01
+64.77
+71.26
+72.31
+probing, where the weights of the pre-trained image encoder
+remained frozen, and a trainable linear classifier was added
+to generate classification results. For comparison, traditional
+methods such as ResNet and ConvNeXt were employed with
+random-initialized parameters or ImageNet-initialized parame-
+ters and underwent full parameter training. During fine-tuning,
+we used 1%, 10%, and 100% of the data to assess the data
+efficiency of visual representation learning.
+b) Experimental results: MedFILIP demonstrates excep-
+tional performance in conducting fine-tuned validation across
+two distinct datasets: RSNA-Pneumonia and VinBigData. As
+shown in Table II, our method surpasses random-initialized or
+ImageNet-initialized non-pretraining approaches while utiliz-
+ing only 10% of the data compared to the full dataset used by
+others, which indicates that our pre-training methods enhance
+image feature representation capabilities, which can reduce the
+reliance on labeled data for downstream tasks. Meanwhile, our
+method outperforms methods that are also pre-trained on the
+MIMIC-CXR dataset, highlighting the advantage of pairing
+fine-grained entities with images and injecting image-specific
+and medical domain knowledge into the model.
+3) Unseen Type Classification:
+a) Experimental settings: To evaluate our model’s applica-
+bility across a broad spectrum, we assessed it on an unseen
+disease under zero-shot. In Table III, the term “Category”
+signifies the use of the known type “Pneumonia” to denote
+COVID-19 during the prediction phase. Simultaneously, “Ex-
+planation” stands for the utilization of image-specific explana-
+tions to represent COVID-19. The explanation of COVID-19
+is Bilateral, diffuse, or localized areas of shadowing or opaque
+lesions in the lung periphery and lower lobes, appearing gray
+and hazy with blurred borders.
+b) Experimental results: Table III illuminates MedFILIP’s
+potent capability in predicting unseen disease categories. Tra-
+
+8
+IEEE TRANSACTIONS AND JOURNALS TEMPLATE
+TABLE IV
+DICE SCORE OF SEGMENTATION WITH DIFFERENT PORTIONS OF
+FINE-TUNING DATA
+Dataset
+Pneumothorax Segmentation
+Portion
+1%
+10%
+100%
+Random
+23.27
+49.30
+66.04
+MedCLIP
+60.83
+69.58
+75.27
+MedKLIP
+66.59
+72.10
+79.37
+Ours
+68.51
+77.42
+80.65
+TABLE V
+RESULTS OF IMAGE-TO-TEXT RETRIEVAL AND TEXT-TO-IMAGE
+RETRIEVAL
+Task
+Image to Text
+Text to Image
+Metric
+P@1
+P@3
+P@10
+P@1
+P@3
+P@10
+ConVIRT
+9.92
+18.59
+47.16
+12.33
+22.10
+44.07
+GloRIA
+11.45
+19.26
+49.93
+14.54
+23.65
+49.24
+MedCLIP
+10.20
+19.74
+50.62
+13.25
+23.49
+50.05
+MedKLIP
+11.18
+20.35
+51.27
+15.50
+24.28
+53.36
+Ours
+14.01
+24.39
+53.75
+16.11
+27.83
+56.63
+ditional machine learning models reliant solely on historical
+data fall short in recognizing COVID-19, as it was not present
+in sets of data predating 2019. Nonetheless, our model, Med-
+FILIP, can leverage the semantic information embedded in
+textual descriptions conveying the attributes of COVID-19 and
+make appropriate predictions. Despite the absence of training
+data labeled as COVID-19, the model can recognize related
+features such as “bilateral” and “shadowing.” As a result, when
+presented with a textual description of symptoms synonymous
+with COVID-19, the model can evaluate whether a provided
+image aligns with this description, thereby determining the
+probability of the image suggesting a COVID-19 case.
+4) Segmentation:
+a) Experimental settings: SIIM ACR Pneumothorax [40]
+dataset was used to evaluate the model’s performance when
+transferred to segmentation tasks. This dataset contains around
+12k chest X-ray images with masks of pneumothorax. We fine-
+tuned the UNet for the segmentation. Our approach, along with
+previous pre-training methods, employed pre-trained vision
+encoders to initialize the feature extraction layers of the UNet.
+A randomly initialized UNet served as a comparative baseline.
+We fine-tuned the models using 1%, 10%, and 100% of the
+data to evaluate the model’s data utilization efficiency. We used
+Dice Score to validate the effectiveness of the method. Dice
+Score measures the overlap between the predicted segmenta-
+tion image and the ground truth image.
+b) Experimental results: MedFILIP aids in learning seman-
+tic and visual features, contributing to improved performance
+in segmentation tasks, as shown in Table IV. Fine-tuning
+the UNet using our method’s pre-trained weights significantly
+reduces training time and surpasses prior methods with only
+10% of the data compared to the full dataset used by others.
+The efficiency indicates the model’s acquisition of substantial
+foundational knowledge, necessitating fewer adjustments for
+the specific task.
+5) Retrieval:
+a) Experimental settings: We randomly selected 1,000 sam-
+ples from the MIMIC-CXR dataset, each associated with a
+specific disease. These samples were transformed into image-
+text pairs. For our approach, the texts were image-specific
+explanations related to the diseases. In contrast, texts used in
+previous methods were categories combined with a prompt
+template, following the format “This is an X-ray image
+of {category}.” Pre-trained vision-language models can be
+applied to retrieval tasks without additional fine-tuning. For
+instance, when retrieving the text most similar to a given
+image from 1,000 texts, the image and all texts were processed
+through their respective encoders to generate feature vectors.
+The cosine similarity between the image and text feature
+vectors was then calculated. The text with the highest cosine
+similarity to the image was considered the most relevant
+match. We used Precision@K to validate the effectiveness of
+the method. Precision@K measures how many of the top K
+items retrieved by the model are relevant or correct.
+b) Experimental results: MedFILIP achieves more accurate
+content matching by simultaneously comprehending both im-
+ages and texts, as shown in Table V. Our model demonstrates
+superior performance in both image-to-text and text-to-image
+retrieval with improvements by a maximum of 4.04%, which
+indicates its versatility and strength in processing multimodal
+information, further broadening its application scope in clinical
+contexts.
+C. Ablation Study
+a) Experimental settings: As shown in Table VI, if Entity is
+enabled, the image-text alignment will be performed between
+images and disease entities; otherwise, the alignment will be
+performed between images and reports. If FG is enabled, the
+entities will contain detailed disease triplets; otherwise, the
+entities will only contain disease categories. If IKI is enabled,
+medical visual domain knowledge will be used to enhance the
+texts; otherwise, the texts will only contain disease triplets.
+If SSM is enabled, the label matrix will be calculated by the
+similarity between texts based on extracted entities and image-
+specific explanations; otherwise, the label matrix would only
+contain 0s or 1s.
+b) Experimental results: An extensive ablation study was
+carried out to confirm the efficacy of different components of
+our MedFILIP method, as illustrated in Table VI. In com-
+paring image-entity alignment with image-report alignment
+(comparing row 1 with row 2), the findings demonstrate that
+aligning images directly with disease entities yields greater
+precision, enhancing the accuracy of image-text pairing. The
+superiority of fine-grained entities (comparing row 2 with
+row 3) is evident as they provide more detailed disease
+information, significantly improving alignment efficacy. More-
+over, fine-grained entities not only retain the majority of
+essential information but also facilitate more precise image
+pairing(comparing row 1 with row 3). Implementing an SSM
+(comparing row 3 with row 4) enhances the label matrix’s
+expressiveness, further boosting model performance. Similarly,
+the introduction of medical visual domain knowledge (IKI)
+
+LIANG et al.: MEDFILIP: MEDICAL FINE-GRAINED LANGUAGE-IMAGE PRE-TRAINING
+9
+TABLE VI
+ABLATION STUDIES
+SSM
+IKI
+FG
+Entity
+MIMIC-16
+Pneumonia
+MIMIC-multi
+ChestX-ray14
+VinBigData
+MIMIC-FG
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+ACC↑
+F1↑
+63.9
+26.3
+76.1
+58.4
+54.6
+26.8
+71.0
+16.3
+53.1
+23.0
+54.9
+31.1
+✓
+67.2
+29.4
+75.6
+57.6
+61.8
+33.6
+76.9
+21.3
+61.9
+27.2
+58.0
+31.6
+✓
+✓
+70.6
+32.6
+77.3
+60.7
+65.0
+35.7
+79.2
+24.5
+66.0
+31.5
+66.3
+36.1
+✓
+✓
+✓
+73.3
+35.4
+80.0
+62.2
+69.8
+39.8
+84.2
+28.3
+68.4
+36.2
+71.7
+40.7
+✓
+✓
+✓
+✓
+74.7
+37.5
+81.2
+66.1
+71.1
+40.2
+85.7
+28.8
+70.0
+38.7
+71.9
+41.3
+Fig. 5.
+A comparison of the predicted cosine similarity scores between images and texts demonstrates that MedFILIP is better at classifying
+subclasses and associating images with fine-grained explanations. There are two parts of cosine similarity scores between the images and the
+corresponding texts, the left part calculates the similarities between the images and the texts of ”template + category” as well as the texts of fine-
+grained categories, and the right part calculates the similarities between the images and the texts of ”template + category” as well as the texts of
+fine-grained explanations of the image. In the bar chart of similarity scores, the bars correspond to the text segments highlighted in the same colors,
+the blue bars are cosine similarity between the images and the texts of ”template + category”, and the pink bars are cosine similarity between the
+images and the texts of fine-grained categories or explanations.
+yields notable improvements (comparing row 4 with row 5),
+enriching the textual descriptions and thereby augmenting the
+model’s interpretative capabilities, which in turn improves
+alignment.
+D. Case Study
+Fig. 5 evidences the promising performance of MedFILIP
+for matching images with both fine-grained entities and image-
+specific explanations. The pre-training models employ con-
+trastive learning between images and text to acquire rich mul-
+timodal representations in the training phase, which enables
+the model to discern the similarity between different images
+and texts effectively. In the inference phase, the classification
+output of the pre-training models is determined by selecting
+the candidate text with the highest cosine similarity to the
+input image, thereby determining whether the image belongs
+to a certain type of disease. To assess the pre-training mod-
+els’ representation capability, we compute similarity scores
+between paired images and texts. A high similarity score
+signifies that the model can effectively extract key features
+and meanings from both the images and texts, and establish
+connections across the different modalities. In this study, the
+images are chest X-ray images, and the texts are of three types:
+(1) a prompt template combined with disease category, using
+the format “This is an X-ray image of {category}”; (2) fine-
+grained disease categories, incorporating disease severity and
+disease category; (3) explanations of the visual attributes and
+medical knowledge related to the disease. Previous approaches
+achieve higher image-text similarity using the prompt template
++ category method, whereas our approach attains higher simi-
+larity with the latter two text types. Our method demonstrates a
+superior predictive correlation between images and their fine-
+grained labels compared to the correlation between images
+and their general category labels. This result diverges from
+those obtained by earlier methods, highlighting advancements
+in our approach for inferring fine-grained disease categories.
+When replacing basic category labels with image-specific
+explanations to associate with the images, our method achieves
+higher similarity scores, indicating its enhanced effectiveness
+in establishing relationships between images and their specific,
+image-related explanations.
+V. DISCUSSION
+The proposed approach mainly solves the following two
+types of challenges, which are crucial for the advancement of
+medical vision-language pretraining:
+Concurrent diseases and repeated occurrences. A diag-
+nostic report can encompass multiple disease descriptions and
+
+10
+IEEE TRANSACTIONS AND JOURNALS TEMPLATE
+a specific disease description may recur across various reports.
+Direct usage of the comprehensive report may introduce
+the risk of entangling separate disease descriptions or could
+result in images of identical diseases being misclassified into
+different categories. In plain terms, these problems arise due
+to the complexity embedded in the text.
+Multiple subclasses and unseen class. A disease category
+may consist of various subclasses, each presenting slightly
+dissimilar symptoms. For instance, different stages of cancer
+may exhibit unique visual characteristics. Sole reliance on
+training labels, that focus merely on broad disease categories,
+may inadvertently overlook the intricate distinctions distinct to
+each subclass. Moreover, an unforeseen class, unrepresented
+in the training phase, may emerge during prediction, such as
+COVID-19, absent from data sets pre-2019 and, thus, inac-
+curately predicted by prior models due to a lack of COVID-
+specific information. These issues arise primarily because the
+supervising text data lacks an adequate depth of information.
+Excessive complexity or too many irrelevant details in
+the text supervision information can make the model learn
+inaccurate patterns or associations. Consequently, the accurate
+learning of image-text representation becomes daunting, lead-
+ing to potential misclassifications. On the flip side, if the text
+supervision information lacks richness, the model might fall
+short in handling complex or novel scenarios, thereby posing
+challenges for fine-grained learning and generalization.
+Our proposed MedFILIP successfully reduces text complex-
+ity while preserving the richness of textual supervision infor-
+mation. It effectively reframes the information extraction task
+as a text generation task, well-aligned with LLM, skillfully
+uncoupling disease entities from their respective reports. It also
+utilizes critical disease details, such as severity and location, to
+enable precise and fine-grained image-text alignment. More-
+over, MedFILIP facilitates knowledge transfer from familiar
+classes to novel classes sharing similar visual attributes to
+enable zero-shot on unseen classes. MedFILIP strategically
+progresses the supervision from a high level of information
+richness yet high complexity (full diagnostic report) to moder-
+ate information richness and reduced complexity (fine-grained
+entities), finally landing on high information richness but
+low complexity (fine-grained entities accompanied by image-
+specific explanations). A high degree of information richness
+provides the model with a more granular visual-semantic
+representation through language supervision, whereas a lower
+complexity eases the training process. Therefore, MedFILIP,
+by thoughtfully maintaining a balance between text complexity
+and information richness, outperforms other approaches in
+terms of medical vision-language pretraining.
+MedFILIP,
+despite
+holding
+substantial
+promise,
+also
+presents potential limitations, which will form the focal point
+of our future research. For instance, although harnessing
+LLM for automatic information extraction is more efficient
+and adaptive than manual processes, given the ”black box”
+nature of LLM, fine-tuning these models poses a significant
+challenge. We aspire to address these issues by crafting more
+effective prompts and utilizing more robust LLM. Addition-
+ally, current explanations are specific to categories and lack
+details for subclasses. For instance, the generic explanation
+given for pneumonia is applied across all its subclasses such
+as severe pneumonia or mild pneumonia. In the future, we
+expect to create an image-specific explanation database for
+disease subclasses and build an inference pipeline from image-
+specific attributes to disease subclasses.
+VI. CONCLUSION
+In this paper, we propose a novel method called MedFILIP
+that leverages fine-grained annotations to improve medical
+vision-language contrastive learning. Our proposed MedFILIP
+effectively circumvents the issues arising from the complexity
+of diagnostic reports and tackles the challenges in predicting
+subclasses and unseen classes. The proposed GPT-IE effec-
+tively extracts fine-grained entities from diagnosis reports by
+a large language model, decoupling disease information, in-
+cluding severity, location, and categories from reports, thereby
+allowing the distinction of disease subclasses. Our IKI maps
+diseases to fine-grained image-specific explanations, enabling
+the model to learn relationships between diseases and their
+attributes, thus allowing predictions on unseen classes based
+on the knowledge learned from seen classes. Our SSM finally
+attains labels representing the correlation between images and
+text based on the aforementioned fine-grained annotations,
+thereby proceeding with fine-grained image-text comparative
+learning. A full set of experiments were carried out which
+demonstrated the proposed MedFILIP framework achieved
+its goal of enhancing multimodal learning via fine-grained
+annotations.
+[1] B. Boecking, N. Usuyama, S. Bannur, D. C. Castro, A. Schwaighofer,
+S. Hyland, M. Wetscherek, T. Naumann, A. Nori, J. Alvarez-Valle et al.,
+“Making the most of text semantics to improve biomedical vision–
+language processing,” in Lect. Notes Comput. Sci.
+Springer, 2022,
+pp. 1–21.
+[2] Z. Li, L. T. Yang, B. Ren, X. Nie, Z. Gao, C. Tan, and S. Z. Li, “Mlip:
+Enhancing medical visual representation with divergence encoder and
+knowledge-guided contrastive learning,” in Proc. IEEE Conf. Comput.
+Vis. Pattern Recognit., 2024, pp. 11 704–11 714.
+[3] B. Liu, D. Lu, D. Wei, X. Wu, Y. Wang, Y. Zhang, and Y. Zheng, “Im-
+proving medical vision-language contrastive pretraining with semantics-
+aware triage,” IEEE Trans. Med. Imaging, vol. 42, no. 12, pp. 3579–
+3589, 2023.
+[4] Y. Zhang, H. Jiang, Y. Miura, C. D. Manning, and C. P. Langlotz,
+“Contrastive learning of medical visual representations from paired
+images and text,” in Proc. Mach. Learn. Res.
+PMLR, 2022, pp. 2–
+25.
+[5] C. Wu, X. Zhang, Y. Zhang, Y. Wang, and W. Xie, “Medklip: Medical
+knowledge enhanced language-image pre-training for x-ray diagnosis,”
+in Proc. IEEE Int. Conf. Comput. Vis., 2023, pp. 21 372–21 383.
+[6] Z. Wang, Z. Wu, D. Agarwal, and J. Sun, “Medclip: Contrastive learning
+from unpaired medical images and text,” in Proc. Conf. Empir. Methods
+Nat. Lang. Process., EMNLP, 2022, pp. 3876–3887.
+[7] J. Irvin, P. Rajpurkar, M. Ko, Y. Yu, S. Ciurea-Ilcus, C. Chute, H. Mark-
+lund, B. Haghgoo, R. Ball, K. Shpanskaya et al., “Chexpert: A large
+chest radiograph dataset with uncertainty labels and expert comparison,”
+in AAAI Conf. Artif. Intell., AAAI, Innov. Appl. Artif. .igence Conf., IAAI
+AAAI Symp. Educ. Adv. Artif. Intell., EAAI, 2019, pp. 590–597.
+[8] A. E. Johnson, T. J. Pollard, S. J. Berkowitz, N. R. Greenbaum, M. P.
+Lungren, C.-y. Deng, R. G. Mark, and S. Horng, “Mimic-cxr, a de-
+identified publicly available database of chest radiographs with free-text
+reports,” Sci. Data, vol. 6, no. 1, p. 317, 2019.
+[9] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal,
+G. Sastry, A. Askell, P. Mishkin, J. Clark et al., “Learning transferable
+visual models from natural language supervision,” in Proc. Mach. Learn.
+Res.
+PMLR, 2021, pp. 8748–8763.
+
+LIANG et al.: MEDFILIP: MEDICAL FINE-GRAINED LANGUAGE-IMAGE PRE-TRAINING
+11
+[10] L. Oakden-Rayner, J. Dunnmon, G. Carneiro, and C. R´e, “Hidden
+stratification causes clinically meaningful failures in machine learning
+for medical imaging,” in Proc. ACM Conf. Health, Inference, Learn.,
+2020, pp. 151–159.
+[11] L. Dai, W. Lei, and X. Zhang, “Efficient subclass segmentation in
+medical images,” in Lect. Notes Comput. Sci.
+Springer, 2023, pp. 266–
+275.
+[12] J.-B. Alayrac, J. Donahue, P. Luc, A. Miech, I. Barr, Y. Hasson, K. Lenc,
+A. Mensch, K. Millican, M. Reynolds et al., “Flamingo: a visual
+language model for few-shot learning,” Adv. neural inf. proces. syst.,
+vol. 35, pp. 23 716–23 736, 2022.
+[13] H. Liu, C. Li, Q. Wu, and Y. J. Lee, “Visual instruction tuning,” Adv.
+neural inf. proces. syst., vol. 36, 2024.
+[14] C. Li, C. Wong, S. Zhang, N. Usuyama, H. Liu, J. Yang, T. Naumann,
+H. Poon, and J. Gao, “Llava-med: Training a large language-and-vision
+assistant for biomedicine in one day,” Adv. neural inf. proces. syst.,
+vol. 36, 2024.
+[15] S. Lee, W. J. Kim, J. Chang, and J. C. Ye, “Llm-cxr: Instruction-
+finetuned llm for cxr image understanding and generation,” in Proc.
+Int. Conf. Learn. Represent., 2024, pp. 1–13.
+[16] Z. Zhao, S. Wang, J. Gu, Y. Zhu, L. Mei, Z. Zhuang, Z. Cui, Q. Wang,
+and D. Shen, “Chatcad+: Towards a universal and reliable interactive
+cad using llms,” IEEE Trans. Med. Imaging, 2024.
+[17] S.-C. Huang, L. Shen, M. P. Lungren, and S. Yeung, “Gloria: A
+multimodal global-local representation learning framework for label-
+efficient medical image recognition,” in Proc. IEEE Int. Conf. Comput.
+Vis., 2021, pp. 3942–3951.
+[18] Y. Zeng, X. Zhang, and H. Li, “Multi-grained vision language pre-
+training: Aligning texts with visual concepts,” in Proc. Int. Conf. Mach.
+Learn.
+PMLR, 2022, pp. 25 994–26 009.
+[19] M. Xu, Z. Zhang, H. Hu, J. Wang, L. Wang, F. Wei, X. Bai, and Z. Liu,
+“End-to-end semi-supervised object detection with soft teacher,” in Proc.
+IEEE Int. Conf. Comput. Vis., 2021, pp. 3060–3069.
+[20] S. Branson, G. Van Horn, S. Belongie, and P. Perona, “Bird species
+categorization using pose normalized deep convolutional nets,” arXiv,
+2014.
+[21] X. Liu, J. Wang, S. Wen, E. Ding, and Y. Lin, “Localizing by describing:
+Attribute-guided attention localization for fine-grained recognition,” in
+AAAI Conf. Artif. Intell., AAAI, vol. 31, 2017, pp. 4190–4196.
+[22] J. Zuo, J. Hong, F. Zhang, C. Yu, H. Zhou, C. Gao, N. Sang, and J. Wang,
+“Plip: Language-image pre-training for person representation learning,”
+in Proc. Adv. Neural Inf. Process. Syst., 2024, pp. 1–15.
+[23] X. Xie, J. Niu, X. Liu, Z. Chen, S. Tang, and S. Yu, “A survey on
+incorporating domain knowledge into deep learning for medical image
+analysis,” Med. Image. Anal., p. 101985, Apr 2021.
+[24] I. Gonzalez-Diaz, “Dermaknet: Incorporating the knowledge of derma-
+tologists to convolutional neural networks for skin lesion diagnosis,”
+IEEE J. Biomed. Health Inform., p. 547–559, Mar 2019.
+[25] H. Chen, W. Zhang, L. Cheng, and H. Ye, “Diverse and high-quality
+data augmentation using gpt for named entity recognition,” in Commun.
+Comput. Info. Sci.
+Springer, 2022, pp. 272–283.
+[26] S. Wang, X. Sun, X. Li, R. Ouyang, F. Wu, T. Zhang, J. Li, and G. Wang,
+“Gpt-ner: Named entity recognition via large language models,” arXiv,
+2023.
+[27] L. Ouyang, J. Wu, X. Jiang, D. Almeida, C. Wainwright, P. Mishkin,
+C. Zhang, S. Agarwal, K. Slama, A. Ray et al., “Training language
+models to follow instructions with human feedback,” Adv. neural inf.
+proces. syst., vol. 35, pp. 27 730–27 744, 2022.
+[28] L. H. Li, P. Zhang, H. Zhang, J. Yang, C. Li, Y. Zhong, L. Wang,
+L. Yuan, L. Zhang, J.-N. Hwang et al., “Grounded language-image pre-
+training,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit., 2022, pp.
+10 965–10 975.
+[29] Z. Qin, H. H. Yi, Q. Lao, and K. Li, “Medical image understanding with
+pretrained vision language models: A comprehensive study,” in Proc. Int.
+Conf. Learn. Represent., 2023, pp. 1–13.
+[30] X. Chen, Y. He, C. Xue, R. Ge, S. Li, and G. Yang, “Knowledge
+boosting: Rethinking medical contrastive vision-language pre-training,”
+in Lect. Notes Comput. Sci.
+Springer, 2023, pp. 405–415.
+[31] G. Shih, C. C. Wu, S. S. Halabi, M. D. Kohli, L. M. Prevedello, T. S.
+Cook, A. Sharma, J. K. Amorosa, V. Arteaga, M. Galperin-Aizenberg
+et al., “Augmenting the national institutes of health chest radiograph
+dataset with expert annotations of possible pneumonia,” Radiology:
+Artificial Intelligence, vol. 1, no. 1, p. e180041, 2019.
+[32] X. Wang, Y. Peng, L. Lu, Z. Lu, M. Bagheri, and R. M. Summers,
+“Chestx-ray8: Hospital-scale chest x-ray database and benchmarks on
+weakly-supervised classification and localization of common thorax
+diseases,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit., 2017,
+pp. 2097–2106.
+[33] H. Q. Nguyen, K. Lam, L. T. Le, H. H. Pham, D. Q. Tran, D. B. Nguyen,
+D. D. Le, C. M. Pham, H. T. Tong, D. H. Dinh et al., “Vindr-cxr: An
+open dataset of chest x-rays with radiologist’s annotations,” Sci. Data,
+vol. 9, no. 1, p. 429, 2022.
+[34] T. Rahman, A. Khandakar, Y. Qiblawey, A. Tahir, S. Kiranyaz, S. B. A.
+Kashem, M. T. Islam, S. Al Maadeed, S. M. Zughaier, M. S. Khan
+et al., “Exploring the effect of image enhancement techniques on covid-
+19 detection using chest x-ray images,” Comput. Biol. Med., vol. 132,
+2021.
+[35] A. L. Goldberger, L. A. Amaral, L. Glass, J. M. Hausdorff, P. C.
+Ivanov, R. G. Mark, J. E. Mietus, G. B. Moody, C.-K. Peng, and H. E.
+Stanley, “Physiobank, physiotoolkit, and physionet: components of a
+new research resource for complex physiologic signals,” Circ., vol. 101,
+no. 23, pp. e215–e220, 2000.
+[36] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image
+recognition,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit., Jun
+2016, pp. 770–778.
+[37] Z. Liu, H. Mao, C.-Y. Wu, C. Feichtenhofer, T. Darrell, and S. Xie,
+“A convnet for the 2020s,” in Proc. IEEE Conf. Comput. Vis. Pattern
+Recognit., 2022, pp. 11 976–11 986.
+[38] E. Alsentzer, J. Murphy, W. Boag, W.-H. Weng, D. Jindi, T. Naumann,
+and M. McDermott, “Publicly available clinical bert embeddings,” in
+Proc. Annu. Meet. Assoc. Comput Linguist., 2019, pp. 72–78.
+[39] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. Gomez,
+L. Kaiser, and I. Polosukhin, “Attention is all you need,” in Proc. Mach.
+Learn. Res., Jun 2017.
+[40] “Siim-acr pneumothorax segmentation,” 2019. [Online]. Available:
+https://www.kaggle.com/c/siim-acr-pneumothorax-segmentation
