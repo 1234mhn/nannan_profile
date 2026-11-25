@@ -1,0 +1,8 @@
+void setup() {
+  Serial.begin(115200);
+}
+
+void loop() {
+  Serial.println("Hello ESP32-S3");
+  delay(1000);
+}
