@@ -40,7 +40,7 @@ OpenClaw 总控 Agent
 - [x] 配置 HTTPS Webhook 并完成服务器侧测试
 - [x] 验证 ESP32-S3 Wi-Fi 扫描
 - [x] 验证 ESP32-S3 连接手机热点、DNS 解析和普通 HTTP 外网访问
-- [ ] 从 ESP32-S3 向 HTTPS Webhook 发请求并在服务器侧确认收到
+- [ ] 编译、烧录 HTTPS Webhook 测试程序，并确认服务器收到请求
 - [x] 验证 ESP32-S3 编译、USB 烧录和串口输出
 - [ ] 实现 ESP32 录音上传
 - [ ] 实现 OpenClaw 语音记录
@@ -51,7 +51,7 @@ OpenClaw 总控 Agent
 
 1. **服务端基础**：部署 OpenClaw，配置 HTTPS Webhook，验证服务器侧响应。已完成。
 2. **开发板基础**：安装 Arduino 开发环境，验证编译、烧录和串口输出。已完成。
-3. **板端连通**：ESP32-S3 已通过手机热点联网，DNS 和普通 HTTP 请求成功；下一步验证 HTTPS Webhook 端到端请求及服务器收件。
+3. **板端连通**：ESP32-S3 已通过手机热点联网，DNS 和普通 HTTP 请求成功；HTTPS Webhook 测试程序已准备，等待编译、烧录与服务器收件验证。
 4. **语音记录**：接入麦克风和按键，验证录音、上传和记录。待实现。
 5. **后续扩展**：逐步加入图片、视频和 Mac 执行器。待实现。
 
@@ -62,7 +62,7 @@ OpenClaw 总控 Agent
 | [2026-11-23](每日记录/2026-11-23.md) | 配置 OpenClaw Webhook、域名 HTTPS 和 Nginx | 服务端 Webhook 请求返回 200 |
 | [2026-11-24](每日记录/2026-11-24.md) | 排查开发板管理器下载失败，改用镜像和手动安装 | IDE 识别 USB 串口，继续准备编译工具 |
 | [2026-11-25](每日记录/2026-11-25.md) | 完成工具安装并选择本地板型，上传速度降至 115200 | 编译和烧录通过，串口输出正常，Wi-Fi 扫描发现 12 个网络 |
-| [2026-11-26](每日记录/2026-11-26.md) | 完成手机热点 Wi-Fi 连接及外网基础检查 | DHCP、DNS 解析成功，HTTP 返回 200；HTTPS Webhook 端到端待验证 |
+| [2026-11-26](每日记录/2026-11-26.md) | 完成手机热点联网、DNS、HTTP 检查；准备 HTTPS Webhook 程序 | Wi-Fi、DNS、HTTP 实测成功；板端 Webhook 待编译和验证 |
 
 后续按日期新增 `每日记录/YYYY-MM-DD.md`，每完成一步就追加到当天记录，并更新上面的索引和搭建路线。
 
@@ -71,7 +71,7 @@ OpenClaw 总控 Agent
 - **问题与处理**：保留失败现象、尝试过的办法和实际结果。
 - **验证与下一步**：写明验证方式、结果，以及尚待完成的步骤。
 
-相关文件：[项目架构](项目架构.md) · [部署记录](部署记录.md) · [串口测试程序](serial_test/serial_test.ino) · [Wi-Fi 扫描程序](wifi_scan/wifi_scan.ino) · [Wi-Fi 联网测试程序](wifi_connect_test/wifi_connect_test.ino)
+相关文件：[项目架构](项目架构.md) · [部署记录](部署记录.md) · [串口测试程序](serial_test/serial_test.ino) · [Wi-Fi 扫描程序](wifi_scan/wifi_scan.ino) · [Wi-Fi 联网测试程序](wifi_connect_test/wifi_connect_test.ino) · [HTTPS Webhook 测试程序](https_webhook_test/https_webhook_test.ino)
 
 ## 安全原则
 
