@@ -126,10 +126,10 @@ void setup() {
   String hookToken = readSecret("Enter the OpenClaw webhook token, then press Send:");
   WiFiClientSecure tlsClient;
   tlsClient.setCACert(ROOT_CA);
-  tlsClient.setTimeout(15000);
+  tlsClient.setTimeout(120000);
 
   HTTPClient https;
-  https.setTimeout(20000);
+  https.setTimeout(120000);
   if (!https.begin(tlsClient, WEBHOOK_URL)) {
     Serial.println("HTTPS_BEGIN_FAILED");
     return;
@@ -137,10 +137,10 @@ void setup() {
 
   https.addHeader("Content-Type", "application/json");
   https.addHeader("Authorization", "Bearer " + hookToken);
-  https.addHeader("Idempotency-Key", "esp32-s3-smoke-test-20261126-01");
+  https.addHeader("Idempotency-Key", "esp32-s3-agent-completion-20261126-01");
 
   const char* payload =
-      R"JSON({"message":"这是一条 ESP32-S3 端到端连通性测试。请仅回复“收到”，不要执行任何操作。","name":"ESP32-S3测试","agentId":"main","deliver":false})JSON";
+      R"JSON({"message":"这是一条 ESP32-S3 端到端连通性测试。请仅回复“收到”，不要执行任何操作。","name":"ESP32-S3测试","agentId":"main","deliver":false,"waitForCompletion":true})JSON";
 
   Serial.println("Sending HTTPS webhook request...");
   int status = https.POST((uint8_t*)payload, strlen(payload));
