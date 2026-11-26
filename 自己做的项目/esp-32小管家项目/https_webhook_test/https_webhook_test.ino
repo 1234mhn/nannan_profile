@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <time.h>
 
 // Replace with the exact phone hotspot name before uploading.
 // Never put the hotspot password or webhook token in this file.
@@ -83,6 +84,20 @@ void setup() {
     return;
   }
   Serial.println("WIFI_CONNECTED");
+
+  Serial.println("Syncing clock for TLS certificate validation...");
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+  time_t now = time(nullptr);
+  unsigned long timeStarted = millis();
+  while (now < 1760000000 && millis() - timeStarted < 20000) {
+    delay(500);
+    now = time(nullptr);
+  }
+  if (now < 1760000000) {
+    Serial.println("NTP_TIME_SYNC_FAILED");
+    return;
+  }
+  Serial.println("NTP_TIME_SYNCED");
 
   String hookToken = readSecret("Enter the OpenClaw webhook token, then press Send:");
   WiFiClientSecure tlsClient;
