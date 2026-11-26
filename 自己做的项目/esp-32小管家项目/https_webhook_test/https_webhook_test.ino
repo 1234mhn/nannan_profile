@@ -66,6 +66,30 @@ void setup() {
   delay(1200);
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+      Serial.print("DISCONNECT_REASON=");
+      Serial.println(info.wifi_sta_disconnected.reason);
+    }
+  });
+
+  Serial.println("Scanning nearby Wi-Fi networks...");
+  int networkCount = WiFi.scanNetworks(false, true);
+  bool targetFound = false;
+  for (int i = 0; i < networkCount; i++) {
+    if (WiFi.SSID(i) == String(WIFI_SSID)) {
+      targetFound = true;
+      Serial.println("TARGET_HOTSPOT_FOUND");
+      Serial.print("RSSI: ");
+      Serial.println(WiFi.RSSI(i));
+      Serial.print("Channel: ");
+      Serial.println(WiFi.channel(i));
+      break;
+    }
+  }
+  Serial.print("TARGET_HOTSPOT_FOUND=");
+  Serial.println(targetFound ? "YES" : "NO");
+  WiFi.scanDelete();
 
   String wifiPassword = readSecret("Enter hotspot password, then press Send:");
   Serial.println("Connecting to Wi-Fi...");
